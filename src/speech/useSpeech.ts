@@ -1,0 +1,163 @@
+/**
+ * Hook de reconocimiento de voz sobre Web Speech API.
+ * Expone un stream de eventos con timestamp para calcular métricas (pausas,
+ * WPM, muletillas). Resuelve las asperezas de la API: auto-stop por silencio
+ * (re-arranque en onend) y ausencia de timestamps por palabra.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SpeechEvent } from '../lib/metrics';
+
+// Tipos mínimos de Web Speech API (no están en lib.dom estándar).
+interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly length: number;
+  item(i: number): { transcript: string };
+  [i: number]: { transcript: string };
+}
+interface SpeechRecognitionEventLike {
+  readonly resultIndex: number;
+  readonly results: {
+    readonly length: number;
+    item(i: number): SpeechRecognitionResultLike;
+    [i: number]: SpeechRecognitionResultLike;
+  };
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function getCtor(): SpeechRecognitionCtor | null {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+export const speechSupported = (): boolean => getCtor() !== null;
+
+export interface UseSpeech {
+  supported: boolean;
+  listening: boolean;
+  events: SpeechEvent[];
+  interim: string; // texto parcial en curso (para feedback en vivo)
+  start: () => void;
+  stop: () => SpeechEvent[];
+  reset: () => void;
+}
+
+export function useSpeech(lang = 'es-AR'): UseSpeech {
+  const supported = speechSupported();
+  const [listening, setListening] = useState(false);
+  const [events, setEvents] = useState<SpeechEvent[]>([]);
+  const [interim, setInterim] = useState('');
+
+  const recRef = useRef<SpeechRecognitionLike | null>(null);
+  const activeRef = useRef(false); // ronda en curso (para re-arranque en onend)
+  const eventsRef = useRef<SpeechEvent[]>([]);
+
+  const pushEvent = useCallback((e: SpeechEvent) => {
+    eventsRef.current = [...eventsRef.current, e];
+    setEvents(eventsRef.current);
+  }, []);
+
+  const build = useCallback(() => {
+    const Ctor = getCtor();
+    if (!Ctor) return null;
+    const rec = new Ctor();
+    rec.lang = lang;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i]!;
+        const text = res[0]?.transcript ?? '';
+        if (res.isFinal) {
+          pushEvent({ text: text.trim(), isFinal: true, t: performance.now() });
+        } else {
+          interimText += text;
+        }
+      }
+      setInterim(interimText);
+    };
+    rec.onerror = (ev) => {
+      // 'no-speech'/'aborted' son esperables; no rompen la ronda.
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        activeRef.current = false;
+        setListening(false);
+      }
+    };
+    rec.onend = () => {
+      // La API corta sola tras silencio; re-arrancamos si la ronda sigue activa.
+      if (activeRef.current) {
+        try {
+          rec.start();
+        } catch {
+          /* start() puede tirar si aún no terminó de cerrar; se reintenta al próximo onend */
+        }
+      } else {
+        setListening(false);
+      }
+    };
+    return rec;
+  }, [lang, pushEvent]);
+
+  const start = useCallback(() => {
+    if (!supported || activeRef.current) return;
+    eventsRef.current = [];
+    setEvents([]);
+    setInterim('');
+    activeRef.current = true;
+    const rec = build();
+    if (!rec) return;
+    recRef.current = rec;
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      activeRef.current = false;
+    }
+  }, [supported, build]);
+
+  const stop = useCallback((): SpeechEvent[] => {
+    activeRef.current = false;
+    setListening(false);
+    setInterim('');
+    try {
+      recRef.current?.stop();
+    } catch {
+      /* noop */
+    }
+    return eventsRef.current;
+  }, []);
+
+  const reset = useCallback(() => {
+    eventsRef.current = [];
+    setEvents([]);
+    setInterim('');
+  }, []);
+
+  // Limpieza al desmontar.
+  useEffect(() => {
+    return () => {
+      activeRef.current = false;
+      try {
+        recRef.current?.abort();
+      } catch {
+        /* noop */
+      }
+    };
+  }, []);
+
+  return { supported, listening, events, interim, start, stop, reset };
+}
