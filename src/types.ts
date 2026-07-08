@@ -1,7 +1,7 @@
 /** Tipos de dominio compartidos por toda la app. */
 import type { SrsState } from './lib/srs';
 
-export type GameType = 'categorias' | 'minuto' | 'precisa';
+export type GameType = 'categorias' | 'letra' | 'tabu' | 'minuto' | 'historias' | 'precisa';
 
 /** Métricas persistidas de una ronda (unión de listMetrics y speechMetrics). */
 export interface RoundMetrics {
@@ -17,6 +17,11 @@ export interface RoundMetrics {
   // Palabra Precisa
   correct?: number;
   attempted?: number;
+  // Tabú Solitario
+  cardsWon?: number;
+  cardsPlayed?: number;
+  // Historias 4/3/2: delta de redondez intento1 → intento3
+  deltaRoundness?: number;
 }
 
 export interface Round {
@@ -53,6 +58,7 @@ export interface DailyStats {
   fluencyIndex: number;
   subLexico: number | null;
   subSoltura: number | null;
+  subExpresividad: number | null;
   subPrecision: number | null;
   sessionCompleted: boolean;
   xp: number;

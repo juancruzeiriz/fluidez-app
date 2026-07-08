@@ -39,8 +39,13 @@ describe('compositeIndex', () => {
     const idx = compositeIndex({ lexico: 100, soltura: 100, precision: 100 });
     expect(idx).toBe(100);
   });
+  it('combina los cuatro subíndices con sus pesos (30/30/20/20)', () => {
+    // 100*.3 + 0*.3 + 100*.2 + 0*.2 = 50
+    const idx = compositeIndex({ lexico: 100, soltura: 0, expresividad: 100, precision: 0 });
+    expect(idx).toBe(50);
+  });
   it('renormaliza pesos cuando falta un subíndice', () => {
-    // solo lexico y soltura (0.4 y 0.4) presentes -> 50/50
+    // solo lexico y soltura (0.3 y 0.3) presentes -> 50/50
     const idx = compositeIndex({ lexico: 80, soltura: 40 });
     expect(idx).toBe(60);
   });

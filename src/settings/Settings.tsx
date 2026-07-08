@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppStore } from '../store';
 import { buildExport, importExport, buildReport, downloadText, type FluidezExport } from '../ai/export';
 import { analyzeWithClaude } from '../ai/claude';
+import { addUserWord } from '../db/repo';
 import { db } from '../db/schema';
 import muletillas from '../seeds/muletillas.json';
 
@@ -12,6 +13,23 @@ export function Settings() {
   const [analysis, setAnalysis] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [word, setWord] = useState('');
+  const [wordDef, setWordDef] = useState('');
+  const [wordGap, setWordGap] = useState('');
+  const [wordMsg, setWordMsg] = useState('');
+
+  async function addWord() {
+    const w = word.trim();
+    if (!w || !wordDef.trim()) {
+      setWordMsg('Completá al menos la palabra y su definición.');
+      return;
+    }
+    await addUserWord(w, wordDef.trim(), wordGap.trim() || `Definición: ${wordDef.trim()} → ______`);
+    setWord('');
+    setWordDef('');
+    setWordGap('');
+    setWordMsg(`"${w}" agregada. Va a aparecer en Palabra Precisa.`);
+  }
 
   async function saveKey() {
     await update({ apiKey: apiKey.trim() });
@@ -113,6 +131,35 @@ export function Settings() {
           <div className="card" style={{ marginTop: 10, background: 'var(--surface-2)', whiteSpace: 'pre-wrap' }}>
             {analysis}
           </div>
+        )}
+      </div>
+
+      <div className="card">
+        <p className="dim small">Agregar palabra propia a Palabra Precisa</p>
+        <p className="small dim">
+          ¿No te salió una palabra en una conversación real? Cargala acá: entra al repaso
+          espaciado y la vas a practicar hasta tenerla lista.
+        </p>
+        <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="palabra (p. ej. efímero)" />
+        <input
+          style={{ marginTop: 8 }}
+          value={wordDef}
+          onChange={(e) => setWordDef(e.target.value)}
+          placeholder="definición corta"
+        />
+        <input
+          style={{ marginTop: 8 }}
+          value={wordGap}
+          onChange={(e) => setWordGap(e.target.value)}
+          placeholder="frase con hueco ______ (opcional)"
+        />
+        <button className="btn secondary block" style={{ marginTop: 8 }} onClick={addWord}>
+          Agregar palabra
+        </button>
+        {wordMsg && (
+          <p className="pill good" style={{ display: 'inline-block', marginTop: 8 }}>
+            {wordMsg}
+          </p>
         )}
       </div>
 

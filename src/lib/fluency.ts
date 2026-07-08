@@ -7,12 +7,13 @@
  * un subíndice todavía no tiene datos, su peso se reparte entre los demás.
  */
 
-export type SubIndexKey = 'lexico' | 'soltura' | 'precision';
+export type SubIndexKey = 'lexico' | 'soltura' | 'expresividad' | 'precision';
 
 /** Pesos heurísticos iniciales (deben sumar 1 sobre los presentes). */
 export const SUBINDEX_WEIGHTS: Record<SubIndexKey, number> = {
-  lexico: 0.4, // acceso léxico (Sprint de Categorías)
-  soltura: 0.4, // redondez del discurso (Un Minuto Redondo)
+  lexico: 0.3, // acceso léxico (Sprint de Categorías + Letra Prohibida)
+  soltura: 0.3, // redondez del discurso (Un Minuto Redondo + Historias 4/3/2)
+  expresividad: 0.2, // circunlocución / SFA (Tabú Solitario)
   precision: 0.2, // vocabulario preciso (Palabra Precisa)
 };
 

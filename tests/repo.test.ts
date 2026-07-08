@@ -10,6 +10,7 @@ import {
   reviewItem,
   reportTot,
   todayStr,
+  planDailySession,
 } from '../src/db/repo';
 import type { Round } from '../src/types';
 
@@ -51,13 +52,34 @@ describe('recomputeDailyStats', () => {
       mkRound({ gameType: 'minuto', score: 80, metrics: {}, contentId: 'tema1' }),
     );
     await saveRound(
+      mkRound({ gameType: 'tabu', metrics: { cardsWon: 3, cardsPlayed: 5 }, contentId: 'tabu' }),
+    );
+    await saveRound(
       mkRound({ gameType: 'precisa', metrics: { correct: 4, attempted: 5 }, contentId: 'batch' }),
     );
     const stats = await recomputeDailyStats(date);
     expect(stats.subLexico).not.toBeNull();
     expect(stats.subSoltura).toBe(80);
+    expect(stats.subExpresividad).toBe(60);
     expect(stats.subPrecision).toBe(80);
     expect(stats.fluencyIndex).toBeGreaterThan(0);
+  });
+
+  it('léxico agrega Sprint y Letra Prohibida', async () => {
+    const date = todayStr();
+    await saveRound(mkRound({ gameType: 'letra', metrics: { perMinute: 8 }, contentId: 'M' }));
+    const stats = await recomputeDailyStats(date);
+    expect(stats.subLexico).not.toBeNull();
+  });
+});
+
+describe('planDailySession', () => {
+  it('devuelve 3 bloques y consolidación fija en precisa', async () => {
+    const plan = await planDailySession();
+    expect(plan).toHaveLength(3);
+    expect(['categorias', 'letra']).toContain(plan[0]);
+    expect(['minuto', 'tabu', 'historias']).toContain(plan[1]);
+    expect(plan[2]).toBe('precisa');
   });
 });
 

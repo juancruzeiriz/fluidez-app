@@ -1,0 +1,20 @@
+[
+  { "letra": "M", "nivel": 1 },
+  { "letra": "P", "nivel": 1 },
+  { "letra": "C", "nivel": 1 },
+  { "letra": "S", "nivel": 1 },
+  { "letra": "T", "nivel": 1 },
+  { "letra": "L", "nivel": 1 },
+  { "letra": "A", "nivel": 2 },
+  { "letra": "F", "nivel": 2 },
+  { "letra": "B", "nivel": 2 },
+  { "letra": "D", "nivel": 2 },
+  { "letra": "R", "nivel": 2 },
+  { "letra": "E", "nivel": 2 },
+  { "letra": "G", "nivel": 3 },
+  { "letra": "H", "nivel": 3 },
+  { "letra": "I", "nivel": 3 },
+  { "letra": "N", "nivel": 3 },
+  { "letra": "O", "nivel": 3 },
+  { "letra": "V", "nivel": 3 }
+]

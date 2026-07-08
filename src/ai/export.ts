@@ -65,20 +65,32 @@ export async function buildReport(): Promise<string> {
   lines.push(`Rondas totales: ${data.rounds.length} · Días activos: ${stats.length}`);
   lines.push('');
   lines.push('## Índice de Fluidez (últimos 30 días)');
-  lines.push('| Fecha | IF | Léxico | Soltura | Precisión | Me trabé (real) |');
-  lines.push('|---|---|---|---|---|---|');
+  lines.push('| Fecha | IF | Léxico | Soltura | Expresiv. | Precisión | Me trabé (real) |');
+  lines.push('|---|---|---|---|---|---|---|');
   for (const s of last) {
     lines.push(
-      `| ${s.date} | ${s.fluencyIndex} | ${fmt(s.subLexico)} | ${fmt(s.subSoltura)} | ${fmt(s.subPrecision)} | ${s.totReports} |`,
+      `| ${s.date} | ${s.fluencyIndex} | ${fmt(s.subLexico)} | ${fmt(s.subSoltura)} | ${fmt(s.subExpresividad)} | ${fmt(s.subPrecision)} | ${s.totReports} |`,
     );
   }
   lines.push('');
+  const letra = byGame('letra');
+  const tabu = byGame('tabu');
+  const historias = byGame('historias');
   lines.push('## Resumen por juego');
   lines.push(
     `- **Sprint de Categorías**: ${cat.length} rondas · media ${avg(cat.map((r) => r.metrics.perMinute ?? 0))} palabras únicas/min`,
   );
   lines.push(
+    `- **Letra Prohibida**: ${letra.length} rondas · media ${avg(letra.map((r) => r.metrics.perMinute ?? 0))} palabras únicas/min`,
+  );
+  lines.push(
+    `- **Tabú Solitario**: ${tabu.length} rondas · cartas ${sum(tabu.map((r) => r.metrics.cardsWon ?? 0))}/${sum(tabu.map((r) => r.metrics.cardsPlayed ?? 0))} superadas`,
+  );
+  lines.push(
     `- **Un Minuto Redondo**: ${min.length} rondas · redondez media ${avg(min.map((r) => r.score))}/100 · WPM medio ${avg(min.map((r) => r.metrics.wpm ?? 0))} · muletillas/min media ${avg(min.map((r) => r.metrics.fillersPerMin ?? 0))}`,
+  );
+  lines.push(
+    `- **Historias 4/3/2**: ${historias.length} rondas · mejora media (intento 1→3) ${avg(historias.map((r) => r.metrics.deltaRoundness ?? 0))} pts de redondez`,
   );
   lines.push(
     `- **Palabra Precisa**: ${pre.length} rondas · aciertos ${sum(pre.map((r) => r.metrics.correct ?? 0))}/${sum(pre.map((r) => r.metrics.attempted ?? 0))}`,

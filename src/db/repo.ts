@@ -54,25 +54,40 @@ export async function roundsOf(gameType: GameType): Promise<Round[]> {
  * - subPrecisión: % de aciertos de Palabra Precisa.
  */
 export async function recomputeDailyStats(date: string): Promise<DailyStats> {
-  const [cat, min, pre] = await Promise.all([
+  const [cat, letra, min, historias, tabu, pre] = await Promise.all([
     roundsOf('categorias'),
+    roundsOf('letra'),
     roundsOf('minuto'),
+    roundsOf('historias'),
+    roundsOf('tabu'),
     roundsOf('precisa'),
   ]);
 
   const sub: Partial<Record<SubIndexKey, number>> = {};
 
-  // Léxico: normalizar el valor del día contra la línea base histórica.
-  const catValues = cat.map((r) => r.metrics.perMinute ?? 0);
-  const catToday = mean(dayRounds(cat, date).map((r) => r.metrics.perMinute ?? 0));
-  if (dayRounds(cat, date).length > 0) {
-    sub.lexico = normalizeAgainstBaseline(catToday, baseline(catValues), true);
+  // Léxico: acceso léxico de Sprint (semántica) + Letra Prohibida (fonémica),
+  // ambos medidos en palabras únicas/min, normalizados contra la línea base.
+  const lexRounds = [...cat, ...letra].sort((a, b) => a.playedAt - b.playedAt);
+  const lexValues = lexRounds.map((r) => r.metrics.perMinute ?? 0);
+  const lexTodayRounds = dayRounds(lexRounds, date);
+  if (lexTodayRounds.length > 0) {
+    const lexToday = mean(lexTodayRounds.map((r) => r.metrics.perMinute ?? 0));
+    sub.lexico = normalizeAgainstBaseline(lexToday, baseline(lexValues), true);
   }
 
-  // Soltura: la redondez ya viene 0-100 relativa a la base personal.
-  const minToday = dayRounds(min, date);
-  if (minToday.length > 0) {
-    sub.soltura = Math.round(mean(minToday.map((r) => r.score)));
+  // Soltura: redondez del discurso (Un Minuto Redondo + Historias 4/3/2),
+  // ya viene 0-100 relativa a la base personal.
+  const soltToday = dayRounds([...min, ...historias], date);
+  if (soltToday.length > 0) {
+    sub.soltura = Math.round(mean(soltToday.map((r) => r.score)));
+  }
+
+  // Expresividad: % de cartas de Tabú superadas (circunlocución / SFA).
+  const tabuToday = dayRounds(tabu, date);
+  if (tabuToday.length > 0) {
+    const won = sum(tabuToday.map((r) => r.metrics.cardsWon ?? 0));
+    const played = sum(tabuToday.map((r) => r.metrics.cardsPlayed ?? 0));
+    sub.expresividad = played > 0 ? Math.round((won / played) * 100) : 0;
   }
 
   // Precisión: aciertos sobre intentos.
@@ -89,6 +104,7 @@ export async function recomputeDailyStats(date: string): Promise<DailyStats> {
     fluencyIndex: compositeIndex(sub),
     subLexico: sub.lexico ?? null,
     subSoltura: sub.soltura ?? null,
+    subExpresividad: sub.expresividad ?? null,
     subPrecision: sub.precision ?? null,
     sessionCompleted: prev?.sessionCompleted ?? false,
     xp: prev?.xp ?? 0,
@@ -120,6 +136,39 @@ export async function personalBest(
 ): Promise<number> {
   const rounds = await roundsOf(gameType);
   return rounds.reduce((best, r) => Math.max(best, selector(r)), 0);
+}
+
+/** Último timestamp jugado de un juego (0 si nunca). */
+async function lastPlayed(gameType: GameType): Promise<number> {
+  const rounds = await roundsOf(gameType);
+  return rounds.length ? rounds[rounds.length - 1]!.playedAt : 0;
+}
+
+/** Elige, entre varios juegos, el menos jugado recientemente (práctica dirigida). */
+async function leastRecent(games: GameType[]): Promise<GameType> {
+  const times = await Promise.all(games.map((g) => lastPlayed(g)));
+  let best = games[0]!;
+  let bestT = times[0]!;
+  for (let i = 1; i < games.length; i++) {
+    if (times[i]! < bestT) {
+      bestT = times[i]!;
+      best = games[i]!;
+    }
+  }
+  return best;
+}
+
+/**
+ * Arma la sesión diaria (3 bloques):
+ *  1. Calentamiento — fluidez léxica: Sprint de Categorías o Letra Prohibida
+ *  2. Plato principal — rotativo entre Un Minuto Redondo / Tabú / Historias
+ *  3. Consolidación — Palabra Precisa (SRS)
+ * En cada bloque rotativo se elige el juego menos jugado recientemente.
+ */
+export async function planDailySession(): Promise<GameType[]> {
+  const warmup = await leastRecent(['categorias', 'letra']);
+  const main = await leastRecent(['minuto', 'tabu', 'historias']);
+  return [warmup, main, 'precisa'];
 }
 
 // ---------- SRS (Palabra Precisa) ----------

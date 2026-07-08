@@ -15,19 +15,20 @@ npm run dev        # http://localhost:5173  (el micrófono funciona en localhost
 
 Otros comandos: `npm test` (49 tests del núcleo), `npm run typecheck`, `npm run build`.
 
-## Qué incluye (iteración 1)
+## Qué incluye
 
-Sesión diaria completa con 3 mini-juegos, cada uno mapeado a un mecanismo con evidencia:
+Los **6 mini-juegos**, cada uno mapeado a un mecanismo con evidencia:
 
 | Juego | Entrena |
 |---|---|
 | 🗂 **Sprint de Categorías** | Fluidez semántica — recuperación léxica bajo presión |
+| 🔤 **Letra Prohibida** | Fluidez fonémica — acceso léxico por inicial (COWAT) |
+| 🚫 **Tabú Solitario** | Circunlocución / SFA — la estrategia de reparación para cuando la palabra no sale |
 | ⏱ **Un Minuto Redondo** | Habla improvisada — mide muletillas, pausas y velocidad |
+| 📖 **Historias 4/3/2** | Proceduralización — misma historia 3 veces con menos tiempo (efecto Nation) |
 | 🎯 **Palabra Precisa** | Vocabulario preciso con repaso espaciado (SM-2) y **corrección de error obligatoria** |
 
-Más: onboarding con test de micrófono, dashboard con **Índice de Fluidez** (contra tu línea base personal), rachas, contador "me trabé en la vida real", y **análisis por IA** (export gratis con prompt listo + integración opcional con la Claude API).
-
-Los otros 3 juegos (Tabú Solitario, Letra Prohibida, Historias 4/3/2) quedan para la iteración 2 — el andamiaje ya los soporta.
+La **sesión diaria** arma 3 bloques (calentamiento léxico · plato principal rotativo · consolidación) eligiendo el juego menos jugado recientemente. Más: onboarding con test de micrófono, dashboard con **Índice de Fluidez** de 4 subíndices (léxico, soltura, expresividad, precisión) contra tu línea base personal, rachas, contador "me trabé en la vida real", carga de palabras propias, y **análisis por IA** (export gratis con prompt listo + integración opcional con la Claude API).
 
 ## Stack
 

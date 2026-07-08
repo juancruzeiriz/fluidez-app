@@ -16,14 +16,16 @@ import type { DailyStats } from '../types';
 export function Dashboard() {
   const navigate = useNavigate();
   const [series, setSeries] = useState<DailyStats[]>([]);
-  const [bests, setBests] = useState({ cat: 0, minuto: 0 });
+  const [bests, setBests] = useState({ cat: 0, letra: 0, minuto: 0, tabu: 0 });
 
   useEffect(() => {
     progressSeries(90).then(setSeries);
     Promise.all([
       personalBest('categorias', (r) => r.metrics.uniqueValid ?? 0),
+      personalBest('letra', (r) => r.metrics.uniqueValid ?? 0),
       personalBest('minuto', (r) => r.score),
-    ]).then(([cat, minuto]) => setBests({ cat, minuto }));
+      personalBest('tabu', (r) => r.metrics.cardsWon ?? 0),
+    ]).then(([cat, letra, minuto, tabu]) => setBests({ cat, letra, minuto, tabu }));
   }, []);
 
   const latest = series[series.length - 1];
@@ -46,6 +48,7 @@ export function Dashboard() {
             <div className="grid-stats" style={{ marginTop: 12 }}>
               <Stat value={fmt(latest.subLexico)} label="acceso léxico" />
               <Stat value={fmt(latest.subSoltura)} label="soltura" />
+              <Stat value={fmt(latest.subExpresividad)} label="expresividad" />
               <Stat value={fmt(latest.subPrecision)} label="precisión" />
             </div>
           </div>
@@ -96,7 +99,9 @@ export function Dashboard() {
             <p className="dim small">récords personales</p>
             <div className="grid-stats">
               <Stat value={bests.cat} label="palabras (Sprint)" />
+              <Stat value={bests.letra} label="palabras (Letra)" />
               <Stat value={`${bests.minuto}/100`} label="mejor minuto" />
+              <Stat value={`${bests.tabu}/5`} label="mejor Tabú" />
             </div>
           </div>
         </>
@@ -116,8 +121,17 @@ export function Dashboard() {
           <button className="btn secondary" onClick={() => navigate('/jugar/categorias')}>
             🗂 Categorías
           </button>
+          <button className="btn secondary" onClick={() => navigate('/jugar/letra')}>
+            🔤 Letra
+          </button>
+          <button className="btn secondary" onClick={() => navigate('/jugar/tabu')}>
+            🚫 Tabú
+          </button>
           <button className="btn secondary" onClick={() => navigate('/jugar/minuto')}>
             ⏱ Minuto
+          </button>
+          <button className="btn secondary" onClick={() => navigate('/jugar/historias')}>
+            📖 Historias
           </button>
           <button className="btn secondary" onClick={() => navigate('/jugar/precisa')}>
             🎯 Precisa
