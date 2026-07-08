@@ -45,6 +45,26 @@ function getCtor(): SpeechRecognitionCtor | null {
 
 export const speechSupported = (): boolean => getCtor() !== null;
 
+/**
+ * Brave expone `webkitSpeechRecognition` pero quita las claves de Google, así
+ * que el motor de voz nunca conecta y todo intento termina en un error
+ * `network`. Lo detectamos para dar un mensaje honesto (no es falta de internet).
+ * `navigator.brave.isBrave()` es async; resolvemos una vez al cargar el módulo.
+ */
+let braveDetected = false;
+const brave = (navigator as unknown as { brave?: { isBrave?: () => Promise<boolean> } }).brave;
+if (brave?.isBrave) {
+  brave
+    .isBrave()
+    .then((v) => {
+      braveDetected = v;
+    })
+    .catch(() => {
+      /* noop */
+    });
+}
+export const isBraveBrowser = (): boolean => braveDetected;
+
 export interface UseSpeech {
   supported: boolean;
   listening: boolean;
@@ -62,7 +82,9 @@ const FATAL_ERRORS: Record<string, string> = {
   'not-allowed': 'El navegador bloqueó el micrófono. Permitilo en el candado de la barra de direcciones.',
   'service-not-allowed': 'El servicio de reconocimiento de voz está deshabilitado en este navegador.',
   'audio-capture': 'No se encontró micrófono. Conectá uno o revisá la configuración de audio.',
-  network: 'El reconocimiento de voz necesita internet y no pudo conectarse.',
+  network:
+    'El navegador no pudo conectar con el motor de reconocimiento de voz. ' +
+    'Si no es un problema de internet, probá en Chrome o Edge de escritorio (o Chrome en Android).',
   'language-not-supported': 'Este navegador no soporta reconocimiento en español.',
 };
 
@@ -104,7 +126,13 @@ export function useSpeech(lang = 'es-AR'): UseSpeech {
     };
     rec.onerror = (ev) => {
       // 'no-speech'/'aborted' son esperables; no rompen la ronda.
-      const fatal = FATAL_ERRORS[ev.error];
+      let fatal = FATAL_ERRORS[ev.error];
+      // En Brave el error 'network' es siempre el motor de Google desactivado.
+      if (ev.error === 'network' && braveDetected) {
+        fatal =
+          'Brave desactiva el reconocimiento de voz (usa el motor de Google, que Brave bloquea por privacidad). ' +
+          'Abrí la app en Chrome o Edge de escritorio, o en Chrome de Android.';
+      }
       if (fatal) {
         activeRef.current = false;
         setListening(false);
