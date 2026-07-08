@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSpeech } from '../speech/useSpeech';
 import { useCountdown } from './useCountdown';
-import { Timer, MicWarning, Stat } from './common';
+import { Timer, MicWarning, Stat, useLevel, LevelBadge } from './common';
 import { finalTranscript } from '../lib/metrics';
 import { tabuViolations } from '../lib/games';
-import type { Round, GameType } from '../types';
+import { poolForLevel } from '../lib/level';
+import { judgeTabuDescription, type TabuJudgeResult } from '../ai/claude';
+import { getSettings } from '../db/repo';
+import type { Round, GameType, AppSettings } from '../types';
 import tabu from '../seeds/tabu.json';
 
-const DURATION = 45;
+/** A mayor nivel, menos tiempo por carta (mayor presión de recuperación). */
+const DURATION_BY_LEVEL: Record<number, number> = { 1: 45, 2: 40, 3: 35 };
 const CARDS = 5;
 const GAME: GameType = 'tabu';
+
+type JudgeState =
+  | { status: 'off' }
+  | { status: 'loading' }
+  | { status: 'done'; result: TabuJudgeResult }
+  | { status: 'error' };
 
 interface Card {
   objetivo: string;
@@ -33,13 +43,26 @@ export function TabuSolitario({ onFinish }: Props) {
   const [phase, setPhase] = useState<'intro' | 'playing' | 'eval' | 'done'>('intro');
   const [idx, setIdx] = useState(0);
   const [violated, setViolated] = useState<string[]>([]);
+  const [judge, setJudge] = useState<JudgeState>({ status: 'off' });
   const results = useRef<boolean[]>([]);
+  const transcriptRef = useRef(''); // descripción dicha en la carta actual
+  const allTranscripts = useRef<string[]>([]);
+  const settingsRef = useRef<AppSettings | null>(null);
   const startedAt = useMemo(() => ({ t: performance.now() }), []);
+  const level = useLevel(GAME);
+  const duration = DURATION_BY_LEVEL[level ?? 1] ?? 45;
+
+  useEffect(() => {
+    getSettings().then((s) => {
+      settingsRef.current = s;
+    });
+  }, []);
 
   const deck = useMemo<Card[]>(() => {
-    const shuffled = [...(tabu as Card[])].sort(() => Math.random() - 0.5);
+    if (level === null) return [];
+    const shuffled = [...poolForLevel(tabu as Card[], level)].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, CARDS);
-  }, []);
+  }, [level]);
   const card = deck[idx];
 
   const timer = useCountdown(() => setPhase('eval'));
@@ -47,19 +70,21 @@ export function TabuSolitario({ onFinish }: Props) {
   // Mic por carta mientras se juega.
   useEffect(() => {
     if (phase !== 'playing' || !card || !speech.supported) return;
+    transcriptRef.current = '';
     speech.reset();
     speech.start();
-    timer.start(DURATION);
+    timer.start(duration);
     return () => {
       speech.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, idx]);
 
-  // Detección de violación en vivo.
+  // Detección de violación en vivo (y captura del transcript de la carta).
   useEffect(() => {
     if (phase !== 'playing' || !card) return;
     const transcript = finalTranscript(speech.events) + ' ' + speech.interim;
+    transcriptRef.current = transcript.trim();
     const hits = tabuViolations(transcript, card.objetivo, card.prohibidas);
     if (hits.length > 0) {
       setViolated(hits);
@@ -70,8 +95,35 @@ export function TabuSolitario({ onFinish }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speech.events, speech.interim]);
 
+  // Juez con IA (opcional): al entrar a la evaluación, si hay API key,
+  // intenta adivinar la palabra a partir de la descripción — como un amigo.
+  useEffect(() => {
+    if (phase !== 'eval' || !card) return;
+    const s = settingsRef.current;
+    const descripcion = transcriptRef.current;
+    if (!s?.apiKey || descripcion.length < 10) {
+      setJudge({ status: 'off' });
+      return;
+    }
+    let alive = true;
+    setJudge({ status: 'loading' });
+    judgeTabuDescription(s.apiKey, s.model, card.objetivo, descripcion)
+      .then((result) => {
+        if (alive) setJudge({ status: 'done', result });
+      })
+      .catch(() => {
+        if (alive) setJudge({ status: 'error' });
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, idx]);
+
   function recordAndNext(won: boolean) {
     results.current.push(won);
+    allTranscripts.current.push(transcriptRef.current);
+    setJudge({ status: 'off' });
     if (idx + 1 < deck.length) {
       setTimeout(() => {
         setViolated([]);
@@ -89,7 +141,7 @@ export function TabuSolitario({ onFinish }: Props) {
       clientRoundId: crypto.randomUUID(),
       gameType: GAME,
       contentId: 'mazo',
-      transcript: '',
+      transcript: allTranscripts.current.join(' | '),
       metrics: { cardsWon: won, cardsPlayed: results.current.length },
       score: won,
       subIndex: results.current.length ? Math.round((won / results.current.length) * 100) : 0,
@@ -102,14 +154,17 @@ export function TabuSolitario({ onFinish }: Props) {
   }
 
   if (!speech.supported) return <MicWarning />;
+  if (level === null) return null; // esperando el nivel desde la DB
 
   if (phase === 'intro') {
     return (
       <div className="card center">
-        <p className="dim small">🚫 Tabú Solitario · circunlocución (SFA)</p>
+        <p className="dim small">
+          🚫 Tabú Solitario · circunlocución (SFA) <LevelBadge level={level} />
+        </p>
         <p>
           Describí la palabra objetivo en voz alta <strong>sin decirla</strong> ni usar las 3
-          palabras prohibidas. 45 s por carta, {CARDS} cartas.
+          palabras prohibidas. {duration} s por carta, {CARDS} cartas.
         </p>
         <p className="dim small">
           Es la estrategia exacta para cuando una palabra no te sale: hablar alrededor de ella.
@@ -143,6 +198,20 @@ export function TabuSolitario({ onFinish }: Props) {
           {card.objetivo}
         </p>
         <p className="dim small">con tu descripción?</p>
+        {judge.status === 'loading' && <p className="dim small">🤖 la IA está adivinando…</p>}
+        {judge.status === 'done' && (
+          <p className="small">
+            🤖 la IA adivinó: <strong>«{judge.result.guess || '—'}»</strong>{' '}
+            {judge.result.understood ? (
+              <span className="pill">✓ te entendió</span>
+            ) : (
+              <span className="pill bad">✗ no acertó</span>
+            )}
+          </p>
+        )}
+        {judge.status === 'error' && (
+          <p className="dim small">🤖 no se pudo consultar a la IA (juzgá vos)</p>
+        )}
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn block" onClick={() => recordAndNext(true)}>
             Sí 👍

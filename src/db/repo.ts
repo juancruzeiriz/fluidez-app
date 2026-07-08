@@ -12,6 +12,8 @@ import {
   type SubIndexKey,
 } from '../lib/fluency';
 import { reviewSm2, qualityFromResult, dueDateFrom, INITIAL_SRS, type SrsState } from '../lib/srs';
+import { nextLevel, masteryValue, LEVEL_THRESHOLDS, LEVEL_WINDOW, clampLevel } from '../lib/level';
+import { weeklySummary, type WeeklySummary } from '../lib/weekly';
 
 export function todayStr(d = new Date()): string {
   return d.toISOString().slice(0, 10);
@@ -33,12 +35,41 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
 
 // ---------- Rounds ----------
 
-/** Guarda una ronda de forma idempotente y recalcula las stats del día. */
+/** Guarda una ronda de forma idempotente y recalcula stats del día y nivel. */
 export async function saveRound(round: Round): Promise<void> {
   const existing = await db.rounds.where('clientRoundId').equals(round.clientRoundId).first();
   if (existing) return; // idempotencia: misma ronda enviada dos veces
   await db.rounds.add(round);
   await recomputeDailyStats(round.sessionDate);
+  await updateLevelAfterRound(round.gameType);
+}
+
+// ---------- Niveles de dificultad ----------
+
+/** Nivel actual de un juego (1 si nunca se ajustó). */
+export async function getLevel(gameType: GameType): Promise<number> {
+  const s = await getSettings();
+  return clampLevel(s.levels?.[gameType] ?? 1);
+}
+
+/** Recalcula el nivel de un juego a partir de sus rondas recientes. */
+async function updateLevelAfterRound(gameType: GameType): Promise<void> {
+  const thresholds = LEVEL_THRESHOLDS[gameType];
+  if (!thresholds) return; // juego sin progresión por niveles
+  const s = await getSettings();
+  const current = clampLevel(s.levels?.[gameType] ?? 1);
+  const rounds = await roundsOf(gameType);
+  const recent = rounds.slice(-LEVEL_WINDOW).map((r) => masteryValue(gameType, r));
+  const next = nextLevel(current, recent, thresholds);
+  if (next !== current) {
+    await saveSettings({ levels: { ...(s.levels ?? {}), [gameType]: next } });
+  }
+}
+
+/** Resumen semanal (semana actual vs. anterior) sobre la serie diaria. */
+export async function getWeeklySummary(today = todayStr()): Promise<WeeklySummary> {
+  const all = await db.dailyStats.toArray();
+  return weeklySummary(all, today);
 }
 
 /** Todas las rondas de un juego, orden cronológico. */

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSpeech } from '../speech/useSpeech';
 import { useCountdown } from './useCountdown';
-import { Timer, MicWarning, Stat, pick } from './common';
+import { Timer, MicWarning, Stat, pick, useLevel, LevelBadge } from './common';
+import { poolForLevel } from '../lib/level';
 import { listMetrics } from '../lib/metrics';
 import { tokenize, wordKey } from '../lib/normalize';
 import type { Round, GameType } from '../types';
@@ -22,7 +23,11 @@ interface Cat {
 export function SprintCategorias({ onFinish }: Props) {
   const speech = useSpeech();
   const [phase, setPhase] = useState<'intro' | 'playing' | 'done'>('intro');
-  const cat = useMemo<Cat>(() => pick(categorias as Cat[]), []);
+  const level = useLevel(GAME);
+  const cat = useMemo<Cat | null>(
+    () => (level === null ? null : pick(poolForLevel(categorias as Cat[], level))),
+    [level],
+  );
   const startedAt = useMemo(() => ({ t: 0 }), []);
 
   const timer = useCountdown(() => finish());
@@ -49,6 +54,7 @@ export function SprintCategorias({ onFinish }: Props) {
   }
 
   function finish() {
+    if (!cat) return;
     const events = speech.stop();
     const duration = performance.now() - startedAt.t;
     const m = listMetrics(events, duration);
@@ -72,11 +78,14 @@ export function SprintCategorias({ onFinish }: Props) {
   }
 
   if (!speech.supported) return <MicWarning />;
+  if (!cat || level === null) return null; // esperando el nivel desde la DB
 
   if (phase === 'intro') {
     return (
       <div className="card center">
-        <p className="dim small">🗂 Sprint de Categorías · fluidez semántica</p>
+        <p className="dim small">
+          🗂 Sprint de Categorías · fluidez semántica <LevelBadge level={level} />
+        </p>
         <p className="prompt">{cat.texto}</p>
         <p className="dim">Decí en voz alta todas las palabras que puedas en 60 segundos.</p>
         <button className="btn big block" onClick={begin}>
