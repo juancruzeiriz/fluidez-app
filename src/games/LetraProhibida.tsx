@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSpeech } from '../speech/useSpeech';
 import { useCountdown } from './useCountdown';
-import { Timer, MicWarning, Stat, pick } from './common';
+import { Timer, MicWarning, Stat, pick, useLevel, LevelBadge } from './common';
+import { poolForLevel } from '../lib/level';
 import { finalTranscript, longestFluentRun } from '../lib/metrics';
 import { validWordsWithLetter } from '../lib/games';
 import type { Round, GameType } from '../types';
@@ -21,13 +22,20 @@ interface Letra {
 export function LetraProhibida({ onFinish }: Props) {
   const speech = useSpeech();
   const [phase, setPhase] = useState<'intro' | 'playing' | 'done'>('intro');
-  const item = useMemo<Letra>(() => pick(letras as Letra[]), []);
+  const level = useLevel(GAME);
+  const item = useMemo<Letra | null>(
+    () => (level === null ? null : pick(poolForLevel(letras as Letra[], level))),
+    [level],
+  );
   const startedAt = useMemo(() => ({ t: 0 }), []);
   const timer = useCountdown(() => finish());
 
   const words = useMemo(
-    () => validWordsWithLetter(finalTranscript(speech.events) + ' ' + speech.interim, item.letra),
-    [speech.events, speech.interim, item.letra],
+    () =>
+      item
+        ? validWordsWithLetter(finalTranscript(speech.events) + ' ' + speech.interim, item.letra)
+        : [],
+    [speech.events, speech.interim, item],
   );
 
   function begin() {
@@ -38,6 +46,7 @@ export function LetraProhibida({ onFinish }: Props) {
   }
 
   function finish() {
+    if (!item) return;
     const events = speech.stop();
     const duration = performance.now() - startedAt.t;
     const valid = validWordsWithLetter(finalTranscript(events), item.letra);
@@ -63,11 +72,14 @@ export function LetraProhibida({ onFinish }: Props) {
   }
 
   if (!speech.supported) return <MicWarning />;
+  if (!item || level === null) return null; // esperando el nivel desde la DB
 
   if (phase === 'intro') {
     return (
       <div className="card center">
-        <p className="dim small">🔤 Letra Prohibida · fluidez fonémica</p>
+        <p className="dim small">
+          🔤 Letra Prohibida · fluidez fonémica <LevelBadge level={level} />
+        </p>
         <p className="dim">Decí en voz alta todas las palabras que empiecen con:</p>
         <p className="big-num" style={{ fontSize: 72 }}>
           {item.letra}

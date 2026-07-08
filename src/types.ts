@@ -74,4 +74,6 @@ export interface AppSettings {
   streakProtectors: number;
   lastSessionDate: string | null;
   onboarded: boolean;
+  /** nivel de dificultad actual por juego (1-3; ausente = 1) */
+  levels: Partial<Record<GameType, number>>;
 }

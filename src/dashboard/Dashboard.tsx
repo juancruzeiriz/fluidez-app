@@ -9,17 +9,20 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { progressSeries, personalBest } from '../db/repo';
+import { progressSeries, personalBest, getWeeklySummary } from '../db/repo';
 import { Stat } from '../games/common';
+import type { WeeklySummary } from '../lib/weekly';
 import type { DailyStats } from '../types';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [series, setSeries] = useState<DailyStats[]>([]);
+  const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
   const [bests, setBests] = useState({ cat: 0, letra: 0, minuto: 0, tabu: 0 });
 
   useEffect(() => {
     progressSeries(90).then(setSeries);
+    getWeeklySummary().then(setWeekly);
     Promise.all([
       personalBest('categorias', (r) => r.metrics.uniqueValid ?? 0),
       personalBest('letra', (r) => r.metrics.uniqueValid ?? 0),
@@ -95,6 +98,35 @@ export function Dashboard() {
             </div>
           )}
 
+          {weekly && weekly.current.activeDays > 0 && (
+            <div className="card">
+              <p className="dim small">tu semana (vs. la anterior)</p>
+              <div className="grid-stats">
+                <Stat
+                  value={`${weekly.current.activeDays}/7`}
+                  label={`días activos${delta(weekly.current.activeDays, weekly.previous.activeDays)}`}
+                />
+                <Stat
+                  value={weekly.current.avgIF ?? '—'}
+                  label={`IF promedio${weekly.deltaIF !== null ? delta(weekly.deltaIF, 0) : ''}`}
+                />
+                <Stat
+                  value={weekly.current.sessionsCompleted}
+                  label={`sesiones completas${delta(
+                    weekly.current.sessionsCompleted,
+                    weekly.previous.sessionsCompleted,
+                  )}`}
+                />
+                <Stat value={weekly.current.xp} label="XP de la semana" />
+              </div>
+              {weekly.insight && (
+                <p className="small dim center" style={{ marginTop: 8 }}>
+                  {weekly.insight}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="card">
             <p className="dim small">récords personales</p>
             <div className="grid-stats">
@@ -144,4 +176,11 @@ export function Dashboard() {
 
 function fmt(n: number | null): string {
   return n === null ? '—' : String(n);
+}
+
+/** Sufijo " (+n)" / " (−n)" comparando contra la semana anterior. */
+function delta(current: number, previous: number): string {
+  const d = current - previous;
+  if (d === 0) return '';
+  return d > 0 ? ` (+${d})` : ` (−${Math.abs(d)})`;
 }

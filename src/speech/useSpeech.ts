@@ -50,16 +50,28 @@ export interface UseSpeech {
   listening: boolean;
   events: SpeechEvent[];
   interim: string; // texto parcial en curso (para feedback en vivo)
+  /** error fatal del reconocimiento (permiso denegado, sin mic, etc.) */
+  error: string | null;
   start: () => void;
   stop: () => SpeechEvent[];
   reset: () => void;
 }
+
+/** Errores de Web Speech que matan la ronda (los demás son transitorios). */
+const FATAL_ERRORS: Record<string, string> = {
+  'not-allowed': 'El navegador bloqueó el micrófono. Permitilo en el candado de la barra de direcciones.',
+  'service-not-allowed': 'El servicio de reconocimiento de voz está deshabilitado en este navegador.',
+  'audio-capture': 'No se encontró micrófono. Conectá uno o revisá la configuración de audio.',
+  network: 'El reconocimiento de voz necesita internet y no pudo conectarse.',
+  'language-not-supported': 'Este navegador no soporta reconocimiento en español.',
+};
 
 export function useSpeech(lang = 'es-AR'): UseSpeech {
   const supported = speechSupported();
   const [listening, setListening] = useState(false);
   const [events, setEvents] = useState<SpeechEvent[]>([]);
   const [interim, setInterim] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const activeRef = useRef(false); // ronda en curso (para re-arranque en onend)
@@ -92,9 +104,11 @@ export function useSpeech(lang = 'es-AR'): UseSpeech {
     };
     rec.onerror = (ev) => {
       // 'no-speech'/'aborted' son esperables; no rompen la ronda.
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+      const fatal = FATAL_ERRORS[ev.error];
+      if (fatal) {
         activeRef.current = false;
         setListening(false);
+        setError(fatal);
       }
     };
     rec.onend = () => {
@@ -117,6 +131,7 @@ export function useSpeech(lang = 'es-AR'): UseSpeech {
     eventsRef.current = [];
     setEvents([]);
     setInterim('');
+    setError(null);
     activeRef.current = true;
     const rec = build();
     if (!rec) return;
@@ -159,5 +174,5 @@ export function useSpeech(lang = 'es-AR'): UseSpeech {
     };
   }, []);
 
-  return { supported, listening, events, interim, start, stop, reset };
+  return { supported, listening, events, interim, error, start, stop, reset };
 }

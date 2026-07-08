@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import { useSpeech } from '../speech/useSpeech';
+import { MicLevel } from '../speech/MicLevel';
 import { finalTranscript } from '../lib/metrics';
 
 export function Onboarding() {
@@ -9,21 +10,30 @@ export function Onboarding() {
   const navigate = useNavigate();
   const speech = useSpeech();
   const [step, setStep] = useState<'intro' | 'mic' | 'ready'>('intro');
-  const [heard, setHeard] = useState('');
+  const [micError, setMicError] = useState<string | null>(null);
+  const [lastInterim, setLastInterim] = useState('');
 
   function testMic() {
+    setMicError(null);
     setStep('mic');
     speech.start();
   }
   function stopMic() {
-    const events = speech.stop();
-    setHeard(finalTranscript(events) || speech.interim);
+    // Guardamos el parcial antes de cortar: los resultados finales pueden
+    // llegar unos ms después de stop() y speech.events se actualiza solo.
+    setLastInterim(speech.interim);
+    speech.stop();
     setStep('ready');
   }
   async function finish() {
     await update({ onboarded: true });
     navigate('/');
   }
+
+  // Reactivo: si un resultado final llega tarde (después de "Listo"),
+  // speech.events cambia y esto se recalcula en el re-render.
+  const heard = finalTranscript(speech.events).trim() || lastInterim.trim();
+  const problem = speech.error ?? micError;
 
   return (
     <>
@@ -66,7 +76,24 @@ export function Onboarding() {
         <div className="card center">
           <p className="prompt">🎙️ Decí algo…</p>
           <p className="dim">Contá qué desayunaste, o simplemente contá hasta diez.</p>
-          <p style={{ minHeight: 40 }}>{speech.interim || <span className="dim">escuchando…</span>}</p>
+          <MicLevel onError={setMicError} />
+          <p className="small dim">
+            {problem
+              ? null
+              : speech.listening
+                ? 'Si las barras se mueven con tu voz, te estoy captando.'
+                : 'conectando con el micrófono…'}
+          </p>
+          {problem && (
+            <p className="pill bad" style={{ display: 'inline-block' }}>
+              {problem}
+            </p>
+          )}
+          <p style={{ minHeight: 40 }}>
+            {speech.interim || finalTranscript(speech.events) || (
+              <span className="dim">escuchando…</span>
+            )}
+          </p>
           <button className="btn big block" onClick={stopMic}>
             Listo
           </button>
@@ -86,9 +113,20 @@ export function Onboarding() {
           ) : (
             <>
               <p className="prompt">No capté nada 🤔</p>
-              <p className="dim">
-                Revisá el permiso de micrófono del navegador y volvé a probar. Igual podés entrar.
-              </p>
+              {problem ? (
+                <p className="pill bad" style={{ display: 'inline-block' }}>
+                  {problem}
+                </p>
+              ) : (
+                <p className="dim">
+                  Las barras de volumen ayudan a saber si el navegador te capta. Probá de nuevo
+                  hablando un poco más fuerte, o revisá el permiso de micrófono. Igual podés
+                  entrar.
+                </p>
+              )}
+              <button className="btn secondary block" onClick={testMic}>
+                Probar de nuevo
+              </button>
             </>
           )}
           <button className="btn big block" onClick={finish}>

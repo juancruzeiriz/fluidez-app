@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   streakProtectors: 0,
   lastSessionDate: null,
   onboarded: false,
+  levels: {},
 };
 
 export const db = new FluidezDB();

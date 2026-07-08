@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { getLevel } from '../db/repo';
+import type { GameType } from '../types';
 
 export function Timer({ seconds }: { seconds: number }) {
   const mm = Math.floor(seconds / 60);
@@ -34,4 +36,28 @@ export function Stat({ value, label }: { value: ReactNode; label: string }) {
 /** Elige un elemento al azar de una lista, opcionalmente filtrando por nivel. */
 export function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
+}
+
+/** Nivel de dificultad actual del juego (null mientras carga de la DB). */
+export function useLevel(gameType: GameType): number | null {
+  const [level, setLevel] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getLevel(gameType).then((l) => {
+      if (alive) setLevel(l);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [gameType]);
+  return level;
+}
+
+/** Chip "nivel X/3" para los intros de los juegos con progresión. */
+export function LevelBadge({ level }: { level: number }) {
+  return (
+    <span className="pill" title="La dificultad sube o baja según tu desempeño reciente">
+      nivel {level}/3
+    </span>
+  );
 }
