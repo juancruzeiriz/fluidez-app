@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastSessionDate: null,
   onboarded: false,
   levels: {},
+  updatedAt: 0,
 };
 
 export const db = new FluidezDB();

@@ -48,6 +48,7 @@ const baseSettings: AppSettings = {
   lastSessionDate: '2026-07-08',
   onboarded: true,
   levels: { categorias: 2 },
+  updatedAt: 100,
 };
 
 describe('mergeRounds', () => {

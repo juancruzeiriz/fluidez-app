@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { buildExport, importExport, buildReport, downloadText, type FluidezExport } from '../ai/export';
 import { analyzeWithClaude } from '../ai/claude';
 import { addUserWord } from '../db/repo';
 import { db } from '../db/schema';
+import {
+  subscribeStatus,
+  signInWithEmail,
+  signOut,
+  syncNow,
+  type SyncStatus,
+} from '../sync/sync';
 import muletillas from '../seeds/muletillas.json';
 
 export function Settings() {
@@ -90,6 +97,8 @@ export function Settings() {
   return (
     <>
       <h1>Ajustes</h1>
+
+      <SyncCard />
 
       <div className="card">
         <p className="dim small">Análisis por IA</p>
@@ -190,4 +199,94 @@ export function Settings() {
       </div>
     </>
   );
+}
+
+/** Sincronización entre dispositivos (login por email + estado). */
+function SyncCard() {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => subscribeStatus(setStatus), []);
+
+  if (!status || !status.configured) return null; // sync no configurado → oculto
+
+  async function sendLink() {
+    setErr('');
+    if (!email.includes('@')) {
+      setErr('Escribí un email válido.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await signInWithEmail(email);
+      setSent(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo enviar el link.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const loggedIn = !!status.email;
+
+  return (
+    <div className="card">
+      <p className="dim small">☁️ Sincronizar entre dispositivos</p>
+
+      {loggedIn ? (
+        <>
+          <p className="small">
+            Conectado como <strong>{status.email}</strong>. Tu progreso se sincroniza solo en
+            todos tus dispositivos.
+          </p>
+          <p className="small dim">{syncLabel(status)}</p>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="btn secondary" onClick={() => void syncNow()} disabled={status.state === 'syncing'}>
+              {status.state === 'syncing' ? 'Sincronizando…' : '🔄 Sincronizar ahora'}
+            </button>
+            <button className="btn ghost" onClick={() => void signOut()}>
+              Cerrar sesión
+            </button>
+          </div>
+        </>
+      ) : sent ? (
+        <p className="small">
+          Te mandamos un link a <strong>{email}</strong>. Abrilo desde este dispositivo para entrar.
+          Repetí lo mismo en tu otro dispositivo con el mismo email y se sincroniza.
+        </p>
+      ) : (
+        <>
+          <p className="small dim">
+            Entrá con tu email (te llega un link mágico, sin contraseña). Después entrá con el
+            mismo email en tu otro dispositivo. Tu API key de Claude nunca se sincroniza.
+          </p>
+          <input
+            type="email"
+            placeholder="tu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <button className="btn block" style={{ marginTop: 8 }} onClick={sendLink} disabled={busy}>
+            {busy ? 'Enviando…' : 'Enviar link de acceso'}
+          </button>
+        </>
+      )}
+
+      {err && (
+        <p className="pill bad" style={{ display: 'inline-block', marginTop: 8 }}>
+          {err}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function syncLabel(s: SyncStatus): string {
+  if (s.state === 'error') return `Error de sync: ${s.lastError ?? ''}`;
+  if (s.state === 'syncing') return 'Sincronizando…';
+  if (s.lastSyncAt) return `Última sync: ${new Date(s.lastSyncAt).toLocaleTimeString()}`;
+  return 'Listo para sincronizar.';
 }
