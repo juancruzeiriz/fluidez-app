@@ -14,6 +14,7 @@ import {
 import { reviewSm2, qualityFromResult, dueDateFrom, INITIAL_SRS, type SrsState } from '../lib/srs';
 import { nextLevel, masteryValue, LEVEL_THRESHOLDS, LEVEL_WINDOW, clampLevel } from '../lib/level';
 import { weeklySummary, type WeeklySummary } from '../lib/weekly';
+import { markDirty } from '../sync/scheduler';
 
 export function todayStr(d = new Date()): string {
   return d.toISOString().slice(0, 10);
@@ -23,12 +24,25 @@ export function todayStr(d = new Date()): string {
 
 export async function getSettings(): Promise<AppSettings> {
   const s = await db.settings.get('app');
-  return s ?? DEFAULT_SETTINGS;
+  // Mezcla con los defaults para que usuarios previos tomen campos nuevos.
+  return s ? { ...DEFAULT_SETTINGS, ...s } : DEFAULT_SETTINGS;
 }
 
-export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+/**
+ * Guarda ajustes. Por defecto sella `updatedAt` (para el sync last-write-wins);
+ * el sync al aplicar cambios remotos pasa `touch: false` para no re-marcarlos.
+ */
+export async function saveSettings(
+  patch: Partial<AppSettings>,
+  touch = true,
+): Promise<AppSettings> {
   const current = await getSettings();
-  const next = { ...current, ...patch, key: 'app' as const };
+  const next: AppSettings = {
+    ...current,
+    ...patch,
+    key: 'app',
+    updatedAt: touch ? Date.now() : (patch.updatedAt ?? current.updatedAt),
+  };
   await db.settings.put(next);
   return next;
 }
@@ -42,6 +56,7 @@ export async function saveRound(round: Round): Promise<void> {
   await db.rounds.add(round);
   await recomputeDailyStats(round.sessionDate);
   await updateLevelAfterRound(round.gameType);
+  markDirty();
 }
 
 // ---------- Niveles de dificultad ----------
@@ -243,6 +258,7 @@ export async function reviewItem(
     dueDate: dueDateFrom(next),
     history: [...item.history, { at, result }],
   });
+  markDirty();
 }
 
 /** Alta de palabra propia (la que no te salió en una conversación real). */
@@ -263,6 +279,7 @@ export async function addUserWord(
     history: [],
   };
   await db.lexicalItems.add(item);
+  markDirty();
 }
 
 // ---------- Rachas ----------
@@ -299,7 +316,9 @@ export async function completeSession(date = todayStr()): Promise<AppSettings> {
   const stats = (await db.dailyStats.get(date)) ?? (await recomputeDailyStats(date));
   await db.dailyStats.put({ ...stats, sessionCompleted: true });
 
-  return saveSettings({ streak, streakProtectors: protectors, lastSessionDate: date });
+  const saved = await saveSettings({ streak, streakProtectors: protectors, lastSessionDate: date });
+  markDirty();
+  return saved;
 }
 
 // ---------- helpers ----------

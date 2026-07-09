@@ -76,4 +76,6 @@ export interface AppSettings {
   onboarded: boolean;
   /** nivel de dificultad actual por juego (1-3; ausente = 1) */
   levels: Partial<Record<GameType, number>>;
+  /** epoch ms del último cambio de ajustes (reloj para el sync last-write-wins) */
+  updatedAt: number;
 }
