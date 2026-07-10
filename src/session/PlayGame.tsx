@@ -3,7 +3,15 @@ import { GameByType } from './SessionFlow';
 import { saveRound } from '../db/repo';
 import type { Round, GameType } from '../types';
 
-const VALID: GameType[] = ['categorias', 'letra', 'tabu', 'minuto', 'historias', 'precisa'];
+const VALID: GameType[] = [
+  'categorias',
+  'letra',
+  'tabu',
+  'minuto',
+  'historias',
+  'precisa',
+  'charla',
+];
 
 /** Modo libre: jugar un solo juego suelto (fuera de la sesión diaria). */
 export function PlayGame() {

@@ -16,6 +16,9 @@ export interface WeekAggregate {
   avgExpresividad: number | null;
   avgPrecision: number | null;
   xp: number;
+  /** misiones de transferencia respondidas y cumplidas ("usé la palabra") */
+  missionsAsked: number;
+  missionsUsed: number;
 }
 
 export interface WeeklySummary {
@@ -54,6 +57,9 @@ function aggregate(stats: DailyStats[]): WeekAggregate {
     avgExpresividad: avg(nums((s) => s.subExpresividad)),
     avgPrecision: avg(nums((s) => s.subPrecision)),
     xp: stats.reduce((acc, s) => acc + s.xp, 0),
+    missionsAsked: stats.filter((s) => s.missionResult === 'used' || s.missionResult === 'not_used')
+      .length,
+    missionsUsed: stats.filter((s) => s.missionResult === 'used').length,
   };
 }
 

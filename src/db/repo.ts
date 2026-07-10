@@ -100,13 +100,14 @@ export async function roundsOf(gameType: GameType): Promise<Round[]> {
  * - subPrecisión: % de aciertos de Palabra Precisa.
  */
 export async function recomputeDailyStats(date: string): Promise<DailyStats> {
-  const [cat, letra, min, historias, tabu, pre] = await Promise.all([
+  const [cat, letra, min, historias, tabu, pre, charla] = await Promise.all([
     roundsOf('categorias'),
     roundsOf('letra'),
     roundsOf('minuto'),
     roundsOf('historias'),
     roundsOf('tabu'),
     roundsOf('precisa'),
+    roundsOf('charla'),
   ]);
 
   const sub: Partial<Record<SubIndexKey, number>> = {};
@@ -121,9 +122,9 @@ export async function recomputeDailyStats(date: string): Promise<DailyStats> {
     sub.lexico = normalizeAgainstBaseline(lexToday, baseline(lexValues), true);
   }
 
-  // Soltura: redondez del discurso (Un Minuto Redondo + Historias 4/3/2),
-  // ya viene 0-100 relativa a la base personal.
-  const soltToday = dayRounds([...min, ...historias], date);
+  // Soltura: redondez del discurso (Un Minuto Redondo + Historias 4/3/2 +
+  // Charla), ya viene 0-100 relativa a la base personal.
+  const soltToday = dayRounds([...min, ...historias, ...charla], date);
   if (soltToday.length > 0) {
     sub.soltura = Math.round(mean(soltToday.map((r) => r.score)));
   }
@@ -155,9 +156,57 @@ export async function recomputeDailyStats(date: string): Promise<DailyStats> {
     sessionCompleted: prev?.sessionCompleted ?? false,
     xp: prev?.xp ?? 0,
     totReports: prev?.totReports ?? 0,
+    missionWord: prev?.missionWord,
+    missionResult: prev?.missionResult,
   };
   await db.dailyStats.put(stats);
   return stats;
+}
+
+// ---------- Misión de transferencia ----------
+
+/**
+ * Asigna la misión del día: una palabra del repaso para usar hoy en una
+ * conversación real (puente explícito entrenamiento → vida real). Prioriza
+ * lo repasado con acierto hoy (está "caliente"); si no, lo más maduro
+ * vencido; si no, lo más maduro con historial. Idempotente por día.
+ */
+export async function assignMission(date = todayStr()): Promise<string | null> {
+  const stats = (await db.dailyStats.get(date)) ?? (await recomputeDailyStats(date));
+  if (stats.missionWord) return stats.missionWord;
+
+  const items = (await db.lexicalItems.toArray()).filter((i) => i.history.length > 0);
+  if (items.length === 0) return null;
+
+  const reviewedToday = items.filter((i) =>
+    i.history.some((h) => h.result === 'first' && todayStr(new Date(h.at)) === date),
+  );
+  const overdue = items.filter((i) => i.dueDate <= date);
+  const pool = reviewedToday.length ? reviewedToday : overdue.length ? overdue : items;
+  const chosen = pool.reduce((best, i) => (i.intervalDays > best.intervalDays ? i : best));
+
+  await db.dailyStats.put({ ...stats, missionWord: chosen.word, missionResult: null });
+  return chosen.word;
+}
+
+/** Registra si la palabra de la misión se usó en una conversación real. */
+export async function resolveMission(date: string, used: boolean): Promise<void> {
+  const stats = await db.dailyStats.get(date);
+  if (!stats?.missionWord) return;
+  await db.dailyStats.put({ ...stats, missionResult: used ? 'used' : 'not_used' });
+  if (used) await addXp(todayStr(), 15);
+}
+
+/** Última misión de un día anterior sin responder (para preguntarla en Home). */
+export async function pendingMission(
+  today = todayStr(),
+): Promise<{ date: string; word: string } | null> {
+  const all = await db.dailyStats.toArray();
+  const pending = all
+    .filter((s) => s.date < today && s.missionWord && s.missionResult == null)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const latest = pending[0];
+  return latest ? { date: latest.date, word: latest.missionWord! } : null;
 }
 
 export async function addXp(date: string, amount: number): Promise<void> {
@@ -208,12 +257,17 @@ async function leastRecent(games: GameType[]): Promise<GameType> {
  * Arma la sesión diaria (3 bloques):
  *  1. Calentamiento — fluidez léxica: Sprint de Categorías o Letra Prohibida
  *  2. Plato principal — rotativo entre Un Minuto Redondo / Tabú / Historias
+ *     (+ Charla, solo si hay API key: conversa con la IA)
  *  3. Consolidación — Palabra Precisa (SRS)
  * En cada bloque rotativo se elige el juego menos jugado recientemente.
  */
 export async function planDailySession(): Promise<GameType[]> {
+  const settings = await getSettings();
+  const mainPool: GameType[] = settings.apiKey
+    ? ['minuto', 'tabu', 'historias', 'charla']
+    : ['minuto', 'tabu', 'historias'];
   const warmup = await leastRecent(['categorias', 'letra']);
-  const main = await leastRecent(['minuto', 'tabu', 'historias']);
+  const main = await leastRecent(mainPool);
   return [warmup, main, 'precisa'];
 }
 
@@ -315,6 +369,7 @@ export async function completeSession(date = todayStr()): Promise<AppSettings> {
 
   const stats = (await db.dailyStats.get(date)) ?? (await recomputeDailyStats(date));
   await db.dailyStats.put({ ...stats, sessionCompleted: true });
+  await assignMission(date); // misión de transferencia del día
 
   const saved = await saveSettings({ streak, streakProtectors: protectors, lastSessionDate: date });
   markDirty();

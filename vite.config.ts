@@ -5,9 +5,26 @@ import { VitePWA } from 'vite-plugin-pwa';
 // GitHub Pages sirve el sitio bajo /fluidez-app/
 export default defineConfig({
   base: '/fluidez-app/',
+  build: {
+    rollupOptions: {
+      output: {
+        // Separa las dependencias pesadas del chunk principal: la app arranca
+        // sin esperar recharts (solo Progreso) ni supabase (solo sync).
+        manualChunks: {
+          recharts: ['recharts'],
+          supabase: ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
+      // SW propio (src/sw.ts): precaching + recordatorio por periodic sync.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectRegister: 'script', // registro en archivo aparte (compatible con la CSP)
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
@@ -24,10 +41,8 @@ export default defineConfig({
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,json}'],
-        // La API de Anthropic nunca se cachea
-        navigateFallbackDenylist: [/^\/api/],
       },
     }),
   ],

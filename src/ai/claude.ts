@@ -129,6 +129,68 @@ export async function judgeTabuDescription(
   return { guess, understood: sameWord(guess, objetivo) };
 }
 
+// ---------- Charla (conversación con IA) ----------
+
+export interface CharlaExchange {
+  question: string;
+  answer: string;
+}
+
+/**
+ * Genera la repregunta del juego Charla a partir de la conversación hasta
+ * ahora. Timeout de 15s: si la API no responde a tiempo, el juego cae a una
+ * repregunta de emergencia local y la charla no se corta.
+ */
+export async function charlaFollowUp(
+  apiKey: string,
+  model: string,
+  exchanges: CharlaExchange[],
+): Promise<string> {
+  const dialogo = exchanges
+    .map((e, i) => `Pregunta ${i + 1}: "${e.question}"\nRespuesta ${i + 1}: "${e.answer}"`)
+    .join('\n');
+
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    signal: AbortSignal.timeout(15000),
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 150,
+      system:
+        'Sos un amigo argentino curioso charlando de manera informal. Las respuestas vienen ' +
+        'transcriptas de voz y pueden tener errores. Leé la conversación y hacé UNA sola ' +
+        'repregunta corta (máximo 20 palabras), concreta y un poco imprevisible, que obligue ' +
+        'a la persona a pensar y elaborar. Español rioplatense, voseo. Respondé SOLO con la pregunta.',
+      messages: [
+        {
+          role: 'user',
+          content: `Conversación hasta ahora:\n${dialogo}\n\nTu repregunta:`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Claude API ${res.status}: ${detail.slice(0, 200)}`);
+  }
+
+  const data: { content?: { type: string; text?: string }[] } = await res.json();
+  const text = (data.content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join('')
+    .trim();
+  if (!text) throw new Error('Respuesta vacía del modelo');
+  return text;
+}
+
 /** Comparación laxa: sin acentos, minúsculas, tolera plural/artículo. */
 function sameWord(a: string, b: string): boolean {
   const norm = (w: string) =>

@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f1117" />
+    <!-- CSP: mitiga XSS (la API key de Claude vive en IndexedDB). Solo se
+         permite conectar con la propia app, la Claude API y Supabase. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.anthropic.com https://*.supabase.co; manifest-src 'self'; worker-src 'self'"
+    />
     <link rel="icon" type="image/svg+xml" href="/fluidez-app/icon.svg" />
     <title>Fluidez — entrenador de expresión oral</title>
   </head>

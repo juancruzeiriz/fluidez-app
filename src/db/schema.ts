@@ -33,6 +33,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastSessionDate: null,
   onboarded: false,
   levels: {},
+  reminderEnabled: false,
+  reminderTime: '19:00',
   updatedAt: 0,
 };
 
