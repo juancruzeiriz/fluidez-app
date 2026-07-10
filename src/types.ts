@@ -1,7 +1,14 @@
 /** Tipos de dominio compartidos por toda la app. */
 import type { SrsState } from './lib/srs';
 
-export type GameType = 'categorias' | 'letra' | 'tabu' | 'minuto' | 'historias' | 'precisa';
+export type GameType =
+  | 'categorias'
+  | 'letra'
+  | 'tabu'
+  | 'minuto'
+  | 'historias'
+  | 'precisa'
+  | 'charla';
 
 /** Métricas persistidas de una ronda (unión de listMetrics y speechMetrics). */
 export interface RoundMetrics {
@@ -22,6 +29,8 @@ export interface RoundMetrics {
   cardsPlayed?: number;
   // Historias 4/3/2: delta de redondez intento1 → intento3
   deltaRoundness?: number;
+  // Charla: latencia media de arranque de respuesta (ms hasta la primera palabra)
+  startLatencyMs?: number;
 }
 
 export interface Round {
@@ -63,6 +72,10 @@ export interface DailyStats {
   sessionCompleted: boolean;
   xp: number;
   totReports: number; // "me trabé hoy en una conversación real"
+  /** misión de transferencia: palabra a usar hoy en una conversación real */
+  missionWord?: string;
+  /** resultado reportado al día siguiente (null/ausente = sin responder) */
+  missionResult?: 'used' | 'not_used' | null;
 }
 
 export interface AppSettings {
@@ -76,6 +89,9 @@ export interface AppSettings {
   onboarded: boolean;
   /** nivel de dificultad actual por juego (1-3; ausente = 1) */
   levels: Partial<Record<GameType, number>>;
+  /** recordatorio diario (donde el navegador lo soporte) */
+  reminderEnabled: boolean;
+  reminderTime: string; // "HH:MM" hora local
   /** epoch ms del último cambio de ajustes (reloj para el sync last-write-wins) */
   updatedAt: number;
 }

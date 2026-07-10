@@ -8,6 +8,8 @@ import {
   countFillers,
   speechMetrics,
   roundnessScore,
+  charlaScore,
+  CHARLA_LATENCY_GRACE_MS,
 } from '../src/lib/metrics';
 
 const ev = (text: string, t: number, isFinal = true): SpeechEvent => ({ text, t, isFinal });
@@ -87,5 +89,37 @@ describe('roundnessScore', () => {
     });
     expect(score).toBeLessThan(100);
     expect(score).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('charlaScore', () => {
+  const cleanTurn = (latency: number) => ({
+    metrics: speechMetrics([ev('a b c d e f g h i j', 0)], 60000, []),
+    startLatencyMs: latency,
+  });
+
+  it('sin turnos devuelve 0', () => {
+    expect(charlaScore([], 5, 10)).toBe(0);
+  });
+
+  it('arrancar rápido con habla limpia da 100', () => {
+    const turns = [cleanTurn(500), cleanTurn(1000), cleanTurn(2000)];
+    expect(charlaScore(turns, 5, 10)).toBe(100);
+  });
+
+  it('la demora en arrancar penaliza (1 pt por cada 500ms sobre la gracia)', () => {
+    const slow = cleanTurn(CHARLA_LATENCY_GRACE_MS + 3000); // 6 pts menos
+    expect(charlaScore([slow], 5, 10)).toBe(94);
+  });
+
+  it('la penalización por latencia tiene tope de 20', () => {
+    const verySlow = cleanTurn(CHARLA_LATENCY_GRACE_MS + 60000);
+    expect(charlaScore([verySlow], 5, 10)).toBe(80);
+  });
+
+  it('promedia los turnos', () => {
+    const fast = cleanTurn(0);
+    const slow = cleanTurn(CHARLA_LATENCY_GRACE_MS + 5000); // 10 pts menos
+    expect(charlaScore([fast, slow], 5, 10)).toBe(95);
   });
 });

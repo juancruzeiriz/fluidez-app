@@ -48,6 +48,8 @@ const baseSettings: AppSettings = {
   lastSessionDate: '2026-07-08',
   onboarded: true,
   levels: { categorias: 2 },
+  reminderEnabled: true,
+  reminderTime: '19:00',
   updatedAt: 100,
 };
 
@@ -129,9 +131,15 @@ describe('mergeSettings', () => {
   });
 
   it('adopta el remoto más nuevo pero preserva la apiKey local', () => {
-    const remote = stripLocalOnly({ ...baseSettings, streak: 9, apiKey: 'sk-otro' });
+    const remote = stripLocalOnly({
+      ...baseSettings,
+      streak: 9,
+      apiKey: 'sk-otro',
+      reminderTime: '08:00',
+    });
     const merged = mergeSettings(baseSettings, remote, 500, 100);
     expect(merged.streak).toBe(9);
+    expect(merged.reminderTime).toBe('08:00'); // los campos nuevos también viajan
     expect(merged.apiKey).toBe('sk-local-secret'); // nunca viene del remoto
   });
 

@@ -98,6 +98,8 @@ export function Settings() {
     <>
       <h1>Ajustes</h1>
 
+      <ReminderCard />
+
       <SyncCard />
 
       <div className="card">
@@ -199,6 +201,75 @@ export function Settings() {
       </div>
     </>
   );
+}
+
+/** Recordatorio diario: toggle + hora. Honesto sobre lo que cada SO permite. */
+function ReminderCard() {
+  const { settings, update } = useAppStore();
+  const [msg, setMsg] = useState('');
+
+  async function toggle() {
+    const next = !settings.reminderEnabled;
+    if (next && 'Notification' in window && Notification.permission !== 'granted') {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        setMsg('El navegador no dio permiso de notificaciones.');
+        return;
+      }
+    }
+    await update({ reminderEnabled: next });
+    if (next) await registerPeriodicReminder();
+    setMsg(next ? 'Recordatorio activado.' : 'Recordatorio desactivado.');
+    setTimeout(() => setMsg(''), 2500);
+  }
+
+  return (
+    <div className="card">
+      <p className="dim small">⏰ Recordatorio diario</p>
+      <div className="row spread">
+        <span className="small">Avisarme si no hice la sesión</span>
+        <button className={settings.reminderEnabled ? 'btn' : 'btn secondary'} onClick={toggle}>
+          {settings.reminderEnabled ? 'Activado' : 'Activar'}
+        </button>
+      </div>
+      {settings.reminderEnabled && (
+        <div className="row spread" style={{ marginTop: 8 }}>
+          <span className="small">A partir de las</span>
+          <input
+            type="time"
+            value={settings.reminderTime}
+            onChange={(e) => void update({ reminderTime: e.target.value })}
+            style={{ width: 'auto' }}
+          />
+        </div>
+      )}
+      <p className="small dim" style={{ marginTop: 6 }}>
+        Funciona en Chrome/Edge con la app instalada (Android y escritorio). En iPhone las webs
+        no pueden despertarse solas: te conviene una alarma del sistema a esa hora.
+      </p>
+      {msg && (
+        <p className="pill good" style={{ display: 'inline-block', marginTop: 6 }}>
+          {msg}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Registra el periodic background sync del recordatorio (si el SO lo soporta). */
+async function registerPeriodicReminder(): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    const periodicSync = (
+      reg as unknown as {
+        periodicSync?: { register: (tag: string, opts: { minInterval: number }) => Promise<void> };
+      }
+    )?.periodicSync;
+    if (!periodicSync) return; // navegador sin soporte: queda solo el aviso in-app
+    await periodicSync.register('fluidez-reminder', { minInterval: 12 * 60 * 60 * 1000 });
+  } catch {
+    /* sin soporte o sin permiso: best-effort */
+  }
 }
 
 /** Sincronización entre dispositivos (login por email + estado). */

@@ -77,4 +77,15 @@ describe('weeklySummary', () => {
     expect(s.current.sessionsCompleted).toBe(2);
     expect(s.current.xp).toBe(50);
   });
+
+  it('cuenta las misiones de transferencia respondidas y cumplidas', () => {
+    const stats = [
+      day('2026-07-08', { missionWord: 'a', missionResult: 'used' }),
+      day('2026-07-07', { missionWord: 'b', missionResult: 'not_used' }),
+      day('2026-07-06', { missionWord: 'c', missionResult: null }), // sin responder: no cuenta
+    ];
+    const s = weeklySummary(stats, TODAY);
+    expect(s.current.missionsAsked).toBe(2);
+    expect(s.current.missionsUsed).toBe(1);
+  });
 });

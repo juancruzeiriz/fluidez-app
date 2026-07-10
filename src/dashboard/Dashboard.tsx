@@ -11,11 +11,13 @@ import {
 } from 'recharts';
 import { progressSeries, personalBest, getWeeklySummary } from '../db/repo';
 import { Stat } from '../games/common';
+import { useAppStore } from '../store';
 import type { WeeklySummary } from '../lib/weekly';
 import type { DailyStats } from '../types';
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const settings = useAppStore((s) => s.settings);
   const [series, setSeries] = useState<DailyStats[]>([]);
   const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
   const [bests, setBests] = useState({ cat: 0, letra: 0, minuto: 0, tabu: 0 });
@@ -119,6 +121,12 @@ export function Dashboard() {
                 />
                 <Stat value={weekly.current.xp} label="XP de la semana" />
               </div>
+              {weekly.current.missionsAsked > 0 && (
+                <p className="small center" style={{ marginTop: 8 }}>
+                  🎯 transferencia: usaste la palabra de la misión{' '}
+                  {weekly.current.missionsUsed}/{weekly.current.missionsAsked} veces
+                </p>
+              )}
               {weekly.insight && (
                 <p className="small dim center" style={{ marginTop: 8 }}>
                   {weekly.insight}
@@ -168,6 +176,11 @@ export function Dashboard() {
           <button className="btn secondary" onClick={() => navigate('/jugar/precisa')}>
             🎯 Precisa
           </button>
+          {settings.apiKey && (
+            <button className="btn secondary" onClick={() => navigate('/jugar/charla')}>
+              💬 Charla
+            </button>
+          )}
         </div>
       </div>
     </>

@@ -165,6 +165,41 @@ export function roundnessScore(input: RoundnessInput): number {
   return clamp(Math.round(score), 0, 100);
 }
 
+// ---------- Charla (conversación con IA) ----------
+
+export interface CharlaTurn {
+  metrics: SpeechMetrics;
+  /** ms desde que apareció la pregunta hasta la primera palabra reconocida */
+  startLatencyMs: number;
+}
+
+/** A partir de este umbral la demora en arrancar la respuesta empieza a restar. */
+export const CHARLA_LATENCY_GRACE_MS = 2500;
+
+/**
+ * Score 0-100 de una charla: redondez de cada turno (misma vara que Un Minuto
+ * Redondo, relativa a la línea base personal) menos una penalización por
+ * tardar en arrancar cada respuesta — el análogo conversacional del bloqueo.
+ */
+export function charlaScore(
+  turns: CharlaTurn[],
+  baselineFillersPerMin: number,
+  baselineWpm: number,
+): number {
+  if (turns.length === 0) return 0;
+  const scores = turns.map((t) => {
+    let s = roundnessScore({
+      metrics: t.metrics,
+      baselineFillersPerMin,
+      baselineWpm,
+    });
+    const extra = Math.max(0, t.startLatencyMs - CHARLA_LATENCY_GRACE_MS);
+    s -= Math.min(20, Math.round(extra / 500)); // 1 pt por cada 500ms de demora, tope 20
+    return clamp(s, 0, 100);
+  });
+  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+}
+
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
